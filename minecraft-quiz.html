@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>マイクラクイズ</title>
+<style>
+  :root{
+    --bg:#101610;--panel:#1a241b;--panel2:#223024;--text:#f7fff4;--muted:#b8c9b5;
+    --green:#53b84f;--green2:#2f7e32;--gold:#f3c84b;--bad:#e95d5d;--line:#344638;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;min-height:100dvh;color:var(--text);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;
+    background:
+      linear-gradient(rgba(0,0,0,.28),rgba(0,0,0,.28)),
+      repeating-linear-gradient(0deg,#172117 0 28px,#142014 28px 56px);
+  }
+  button{font:inherit}
+  .app{max-width:720px;margin:auto;min-height:100dvh;padding:18px 14px calc(22px + env(safe-area-inset-bottom))}
+  .screen{display:none;min-height:calc(100dvh - 40px)}
+  .screen.active{display:flex;flex-direction:column}
+  .logo{text-align:center;margin:26px 0 8px;font-weight:1000;letter-spacing:.04em;font-size:clamp(34px,10vw,60px);text-shadow:0 4px 0 #000}
+  .logo span{color:#6bcf5e}
+  .sub{text-align:center;color:var(--muted);font-weight:700;margin-bottom:26px}
+  .panel{background:rgba(24,34,25,.94);border:3px solid #314932;box-shadow:0 8px 0 #0b100b;border-radius:8px;padding:16px}
+  .choose{display:grid;gap:14px;margin:16px 0}
+  .bigbtn{
+    width:100%;min-height:76px;border:3px solid #203020;border-bottom-width:7px;border-radius:8px;
+    background:linear-gradient(#65c75d,#3d9a3d);color:white;font-weight:1000;font-size:25px;
+    text-shadow:0 2px 0 rgba(0,0,0,.45)
+  }
+  .bigbtn:active{transform:translateY(3px);border-bottom-width:4px}
+  .note{text-align:center;color:#d9e4d6;font-size:14px;line-height:1.6}
+  .top{display:flex;align-items:center;gap:10px;margin-top:2px}
+  .count{font-weight:1000;white-space:nowrap}
+  .timer{height:18px;border:3px solid #0b0f0b;background:#283228;flex:1;overflow:hidden}
+  .bar{height:100%;width:100%;background:linear-gradient(90deg,#54d25a,#d5cf47);transform-origin:left center}
+  .card{margin-top:14px;display:flex;flex-direction:column;flex:1}
+  .category{text-align:center;color:#cfe1cb;font-size:14px;font-weight:800;letter-spacing:.08em;margin:3px 0 8px}
+  .imagebox{
+    position:relative;flex:1;min-height:310px;max-height:57dvh;
+    display:flex;align-items:center;justify-content:center;
+    background:
+      linear-gradient(45deg,#9fd587 25%,transparent 25%) 0 0/38px 38px,
+      linear-gradient(45deg,transparent 75%,#79b968 75%) 0 0/38px 38px,
+      #8ac675;
+    border:4px solid #0d140d;border-radius:6px;overflow:hidden
+  }
+  #qimg{max-width:90%;max-height:90%;object-fit:contain;image-rendering:auto;filter:drop-shadow(0 12px 8px rgba(0,0,0,.34))}
+  .fallback{display:none;font-size:90px;filter:drop-shadow(0 8px 0 rgba(0,0,0,.25))}
+  .heard{
+    min-height:66px;margin:12px 0 6px;padding:10px 12px;border:3px solid var(--line);border-radius:7px;
+    background:#111811;text-align:center;font-weight:1000;font-size:clamp(24px,7vw,40px);
+    display:flex;align-items:center;justify-content:center
+  }
+  .heard.listening{border-color:#6ad067;box-shadow:0 0 0 3px rgba(106,208,103,.18)}
+  .heard.good{color:#76e878;border-color:#76e878}
+  .heard.bad{color:#ff8b8b;border-color:#ff8b8b}
+  .microw{display:grid;grid-template-columns:1fr auto;gap:9px}
+  .mic{
+    min-height:58px;border:3px solid #243225;border-bottom-width:6px;border-radius:7px;
+    background:#f5f5f0;color:#111;font-size:19px;font-weight:1000
+  }
+  .skip{min-width:90px;border:3px solid #3c463c;border-bottom-width:6px;border-radius:7px;background:#303a31;color:#fff;font-weight:900}
+  .status{text-align:center;color:#c6d6c2;font-size:13px;min-height:22px;padding-top:6px}
+  .answerFlash{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:rgba(5,8,5,.88);z-index:4;text-align:center;padding:18px
+  }
+  .answerFlash.show{display:flex}
+  .answerFlash .mark{font-size:72px;font-weight:1000}
+  .answerFlash .ans{font-size:clamp(30px,9vw,48px);font-weight:1000}
+  .resultTitle{text-align:center;font-size:42px;font-weight:1000;margin:18px 0 2px}
+  .score{text-align:center;font-size:68px;font-weight:1000;color:#77df6b;text-shadow:0 4px 0 #000;margin:4px 0 14px}
+  .resultList{display:grid;gap:8px;margin:12px 0 18px}
+  .row{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:8px;background:#1a241b;border:2px solid #304332;padding:9px 10px;border-radius:6px}
+  .row img{width:38px;height:38px;object-fit:contain}
+  .ok{color:#6fe16f;font-weight:1000}.ng{color:#ff8a8a;font-weight:1000}
+  .smallbtn{min-height:58px;border:3px solid #203020;border-bottom-width:6px;border-radius:7px;background:#55af4e;color:#fff;font-weight:1000;font-size:20px}
+  .copyright{text-align:center;font-size:11px;color:#9fb09c;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <section id="home" class="screen active">
+    <div class="logo">⛏️ <span>マイクラ</span>クイズ</div>
+    <div class="sub">みて・こたえて・あそぼう！</div>
+    <div class="panel">
+      <div style="text-align:center;font-weight:1000;font-size:22px">もんだいすうを えらんでね</div>
+      <div class="choose">
+        <button class="bigbtn" onclick="startGame(5)">5もん</button>
+        <button class="bigbtn" onclick="startGame(10)">10もん</button>
+        <button class="bigbtn" onclick="startGame(20)">20もん</button>
+      </div>
+      <div class="note">モブ・キャラクター・ブロック・アイテム・そざいが出てくるよ。<br>マイクボタンを押して、名前を声で答えてね！</div>
+    </div>
+    <div class="copyright">非公式ファンクイズです。Minecraft / Mojang Studios とは提携していません。</div>
+  </section>
+
+  <section id="quiz" class="screen">
+    <div class="top">
+      <div id="count" class="count">1 / 5</div>
+      <div class="timer"><div id="bar" class="bar"></div></div>
+      <div id="seconds" class="count">15</div>
+    </div>
+    <div class="card">
+      <div id="category" class="category">モブ</div>
+      <div class="imagebox">
+        <img id="qimg" alt="クイズ画像">
+        <div id="fallback" class="fallback">❓</div>
+        <div id="answerFlash" class="answerFlash">
+          <div id="mark" class="mark">○</div>
+          <div id="ans" class="ans"></div>
+        </div>
+      </div>
+      <div id="heard" class="heard">なまえを いってね</div>
+      <div class="microw">
+        <button id="mic" class="mic" onclick="toggleMic()">🎤 マイクで こたえる</button>
+        <button class="skip" onclick="finishQuestion(false,'パス')">パス</button>
+      </div>
+      <div id="status" class="status">Android ChromeではHTTPSでマイクを許可してください</div>
+    </div>
+  </section>
+
+  <section id="result" class="screen">
+    <div class="resultTitle">けっか！</div>
+    <div id="score" class="score">0 / 5</div>
+    <div id="message" class="sub"></div>
+    <div id="resultList" class="resultList"></div>
+    <button class="smallbtn" onclick="showHome()">もういちど あそぶ</button>
+  </section>
+</div>
+
+<script>
+const FILE = name => "https://minecraft.wiki/w/Special:Redirect/file/" + encodeURIComponent(name);
+
+const QUESTIONS = [
+  {name:"クリーパー", aliases:["くりーぱー"], category:"モブ", file:"Creeper JE3 BE1.png", icon:"💥"},
+  {name:"ゾンビ", aliases:["ぞんび"], category:"モブ", file:"Zombie JE3 BE2.png", icon:"🧟"},
+  {name:"スケルトン", aliases:["すけるとん"], category:"モブ", file:"Skeleton JE6 BE4.png", icon:"💀"},
+  {name:"エンダーマン", aliases:["えんだーまん"], category:"モブ", file:"Enderman JE3 BE1.png", icon:"👾"},
+  {name:"エンダードラゴン", aliases:["えんだーどらごん","ドラゴン"], category:"モブ", file:"Ender Dragon JE2 BE2.png", icon:"🐉"},
+  {name:"ウィザー", aliases:["うぃざー"], category:"モブ", file:"Wither JE2 BE2.png", icon:"☠️"},
+  {name:"ブタ", aliases:["ぶた"], category:"どうぶつ", file:"Pig JE3 BE2.png", icon:"🐷"},
+  {name:"ウシ", aliases:["うし"], category:"どうぶつ", file:"Cow JE5 BE2.png", icon:"🐄"},
+  {name:"ヒツジ", aliases:["ひつじ"], category:"どうぶつ", file:"White Sheep JE3 BE6.png", icon:"🐑"},
+  {name:"ニワトリ", aliases:["にわとり"], category:"どうぶつ", file:"Chicken JE2 BE2.png", icon:"🐔"},
+  {name:"オオカミ", aliases:["おおかみ"], category:"どうぶつ", file:"Wolf JE2 BE2.png", icon:"🐺"},
+  {name:"ハチ", aliases:["はち"], category:"モブ", file:"Bee JE1 BE1.png", icon:"🐝"},
+  {name:"アイアンゴーレム", aliases:["あいあんごーれむ","ゴーレム"], category:"モブ", file:"Iron Golem JE2 BE2.png", icon:"🤖"},
+  {name:"村人", aliases:["むらびと","村びと"], category:"キャラクター", file:"Plains Villager Base.png", icon:"🧑"},
+  {name:"スティーブ", aliases:["すてぃーぶ"], category:"キャラクター", file:"Steve.png", icon:"🧑‍🌾"},
+  {name:"アレックス", aliases:["あれっくす"], category:"キャラクター", file:"Alex.png", icon:"🧑‍🌾"},
+
+  {name:"草ブロック", aliases:["くさぶろっく","草"], category:"ブロック", file:"Grass Block JE7 BE6.png", icon:"🟩"},
+  {name:"土", aliases:["つち","土ブロック"], category:"ブロック", file:"Dirt JE2 BE2.png", icon:"🟫"},
+  {name:"石", aliases:["いし"], category:"ブロック", file:"Stone JE6 BE3.png", icon:"🪨"},
+  {name:"丸石", aliases:["まるいし"], category:"ブロック", file:"Cobblestone JE6 BE3.png", icon:"🪨"},
+  {name:"砂", aliases:["すな"], category:"ブロック", file:"Sand JE5 BE3.png", icon:"🟨"},
+  {name:"ガラス", aliases:["がらす"], category:"ブロック", file:"Glass JE4 BE2.png", icon:"🧊"},
+  {name:"TNT", aliases:["てぃーえぬてぃー","tnt"], category:"ブロック", file:"TNT JE3 BE2.png", icon:"🧨"},
+  {name:"作業台", aliases:["さぎょうだい","クラフトテーブル"], category:"ブロック", file:"Crafting Table JE4 BE3.png", icon:"🧰"},
+  {name:"チェスト", aliases:["ちぇすと"], category:"ブロック", file:"Chest JE2 BE2.png", icon:"📦"},
+  {name:"かまど", aliases:["竈","炉","かまど"], category:"ブロック", file:"Furnace JE4.png", icon:"🔥"},
+  {name:"黒曜石", aliases:["こくようせき"], category:"ブロック", file:"Obsidian JE3 BE2.png", icon:"⬛"},
+  {name:"ダイヤモンド鉱石", aliases:["だいやもんどこうせき","ダイヤ鉱石","だいやこうせき"], category:"ブロック", file:"Diamond Ore JE5 BE5.png", icon:"💎"},
+  {name:"金鉱石", aliases:["きんこうせき","金こうせき"], category:"ブロック", file:"Gold Ore JE7 BE4.png", icon:"🟨"},
+  {name:"鉄鉱石", aliases:["てつこうせき","鉄こうせき"], category:"ブロック", file:"Iron Ore JE6 BE4.png", icon:"⬜"},
+
+  {name:"ダイヤモンド", aliases:["だいやもんど","ダイヤ"], category:"そざい", file:"Diamond JE3 BE3.png", icon:"💎"},
+  {name:"金のインゴット", aliases:["きんのいんごっと","金インゴット","きんいんごっと"], category:"そざい", file:"Gold Ingot JE4 BE2.png", icon:"🟨"},
+  {name:"鉄のインゴット", aliases:["てつのいんごっと","鉄インゴット","てついんごっと"], category:"そざい", file:"Iron Ingot JE3 BE2.png", icon:"⬜"},
+  {name:"石炭", aliases:["せきたん"], category:"そざい", file:"Coal JE4 BE3.png", icon:"⚫"},
+  {name:"レッドストーンダスト", aliases:["れっどすとーんだすと","レッドストーン","れっどすとーん"], category:"そざい", file:"Redstone Dust JE2 BE2.png", icon:"🔴"},
+  {name:"エメラルド", aliases:["えめらるど"], category:"そざい", file:"Emerald JE3 BE3.png", icon:"🟢"},
+  {name:"ラピスラズリ", aliases:["らぴすらずり","ラピス"], category:"そざい", file:"Lapis Lazuli JE2 BE2.png", icon:"🔵"},
+  {name:"ネザライトインゴット", aliases:["ねざらいといんごっと","ネザライト"], category:"そざい", file:"Netherite Ingot JE1 BE2.png", icon:"⬛"},
+
+  {name:"ダイヤモンドの剣", aliases:["だいやもんどのつるぎ","ダイヤの剣","だいやのつるぎ"], category:"アイテム", file:"Diamond Sword JE3 BE3.png", icon:"⚔️"},
+  {name:"鉄のツルハシ", aliases:["てつのつるはし","鉄ツルハシ"], category:"アイテム", file:"Iron Pickaxe JE3 BE2.png", icon:"⛏️"},
+  {name:"弓", aliases:["ゆみ"], category:"アイテム", file:"Bow JE2 BE1.png", icon:"🏹"},
+  {name:"矢", aliases:["や"], category:"アイテム", file:"Arrow JE2 BE1.png", icon:"➡️"},
+  {name:"バケツ", aliases:["ばけつ"], category:"アイテム", file:"Bucket JE2 BE2.png", icon:"🪣"},
+  {name:"リンゴ", aliases:["りんご"], category:"アイテム", file:"Apple JE3 BE3.png", icon:"🍎"},
+  {name:"金のリンゴ", aliases:["きんのりんご","金リンゴ"], category:"アイテム", file:"Golden Apple JE2 BE2.png", icon:"🍏"},
+  {name:"エンダーパール", aliases:["えんだーぱーる"], category:"アイテム", file:"Ender Pearl JE3 BE2.png", icon:"🟢"},
+  {name:"たいまつ", aliases:["松明","たいまつ"], category:"アイテム", file:"Torch JE4 BE2.png", icon:"🔥"},
+  {name:"ベッド", aliases:["べっど","赤いベッド"], category:"アイテム", file:"Red Bed JE4 BE3.png", icon:"🛏️"}
+];
+
+let game=[], index=0, score=0, answers=[], remain=15, timer=null, recognition=null, locked=false, listening=false;
+
+function norm(s){
+  return (s||"").toLowerCase()
+    .replace(/[ 　・ー〜～!！?？。、,.]/g,"")
+    .replace(/ｔｎｔ/g,"tnt");
+}
+function hiraToKata(str){return str.replace(/[\u3041-\u3096]/g,ch=>String.fromCharCode(ch.charCodeAt(0)+0x60))}
+function matches(q, spoken){
+  const x=norm(spoken), variants=[q.name,...(q.aliases||[])];
+  return variants.some(v=>{
+    const a=norm(v);
+    return x===a || hiraToKata(x)===hiraToKata(a);
+  });
+}
+function shuffle(a){
+  const b=[...a];
+  for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}
+  return b;
+}
+function show(id){
+  document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+function showHome(){
+  stopRecognition();clearInterval(timer);show("home");
+}
+function startGame(n){
+  game=shuffle(QUESTIONS).slice(0,n); index=0;score=0;answers=[];show("quiz"); loadQuestion();
+}
+function loadQuestion(){
+  locked=false;remain=15;
+  const q=game[index];
+  document.getElementById("count").textContent=`${index+1} / ${game.length}`;
+  document.getElementById("seconds").textContent=remain;
+  document.getElementById("bar").style.transform="scaleX(1)";
+  document.getElementById("category").textContent=q.category;
+  document.getElementById("heard").className="heard";
+  document.getElementById("heard").textContent="なまえを いってね";
+  document.getElementById("status").textContent="🎤を押して声で答えよう";
+  document.getElementById("answerFlash").classList.remove("show");
+  const img=document.getElementById("qimg"), fb=document.getElementById("fallback");
+  fb.textContent=q.icon||"❓"; fb.style.display="none";img.style.display="block";
+  img.onerror=()=>{img.style.display="none";fb.style.display="block"};
+  img.src=FILE(q.file);
+  clearInterval(timer);
+  timer=setInterval(()=>{
+    remain=Math.max(0,remain-0.1);
+    document.getElementById("seconds").textContent=Math.ceil(remain);
+    document.getElementById("bar").style.transform=`scaleX(${remain/15})`;
+    if(remain<=0) finishQuestion(false,"じかんぎれ");
+  },100);
+}
+function makeRecognition(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  const r=new SR();
+  r.lang="ja-JP";r.interimResults=true;r.continuous=true;
+  r.onstart=()=>{
+    listening=true;
+    document.getElementById("heard").classList.add("listening");
+    document.getElementById("mic").textContent="🛑 きいています";
+    document.getElementById("status").textContent="きいています… はっきり名前を言ってね";
+  };
+  r.onresult=e=>{
+    if(locked)return;
+    let interim="",finalText="";
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal)finalText+=t; else interim+=t;
+    }
+    const text=finalText||interim;
+    if(text){
+      const h=document.getElementById("heard");
+      h.textContent=text;
+      const q=game[index];
+      if(matches(q,text)){h.classList.add("good");finishQuestion(true,text)}
+      else if(finalText){h.classList.add("bad");setTimeout(()=>{if(!locked){h.classList.remove("bad");h.textContent="もういちど いってみよう"}},700)}
+    }
+  };
+  r.onerror=e=>{
+    listening=false;
+    const map={not_allowed:"マイクの許可が必要です", "not-allowed":"マイクの許可が必要です", "no-speech":"声が聞こえませんでした", network:"音声認識の通信エラーです"};
+    document.getElementById("status").textContent=map[e.error]||("マイクエラー: "+e.error);
+    document.getElementById("mic").textContent="🎤 マイクで こたえる";
+  };
+  r.onend=()=>{
+    listening=false;
+    document.getElementById("mic").textContent="🎤 マイクで こたえる";
+    document.getElementById("heard").classList.remove("listening");
+  };
+  return r;
+}
+function toggleMic(){
+  if(locked)return;
+  if(listening){stopRecognition();return}
+  if(!recognition) recognition=makeRecognition();
+  if(!recognition){
+    document.getElementById("status").textContent="このブラウザは音声認識に対応していません。Android Chrome + HTTPSで試してください。";
+    return;
+  }
+  try{recognition.start()}catch(e){}
+}
+function stopRecognition(){
+  if(recognition && listening){try{recognition.stop()}catch(e){}}
+  listening=false;
+}
+function finishQuestion(ok, spoken){
+  if(locked)return;locked=true;clearInterval(timer);stopRecognition();
+  const q=game[index];
+  if(ok)score++;
+  answers.push({q,ok,spoken});
+  const flash=document.getElementById("answerFlash");
+  document.getElementById("mark").textContent=ok?"○":"×";
+  document.getElementById("mark").style.color=ok?"#79e675":"#ff7e7e";
+  document.getElementById("ans").textContent=q.name;
+  flash.classList.add("show");
+  setTimeout(()=>{
+    index++;
+    if(index<game.length)loadQuestion();else showResult();
+  },1200);
+}
+function showResult(){
+  show("result");
+  document.getElementById("score").textContent=`${score} / ${game.length}`;
+  const rate=score/game.length;
+  document.getElementById("message").textContent=rate===1?"ぜんもんせいかい！ すごい！":rate>=.7?"とってもよくできました！":rate>=.4?"いいちょうし！ もういちどやってみよう！":"つぎはもっとできるよ！";
+  const box=document.getElementById("resultList");box.innerHTML="";
+  answers.forEach((a,i)=>{
+    const row=document.createElement("div");row.className="row";
+    row.innerHTML=`<div style="font-weight:1000">${i+1}</div><div style="display:flex;align-items:center;gap:10px"><img src="${FILE(a.q.file)}" alt="${a.q.name}" onerror="this.style.display='none'"><div><div style="font-weight:1000">${a.q.name}</div><div style="font-size:12px;color:#aebdaa">${a.q.category}</div></div></div><div class="${a.ok?'ok':'ng'}">${a.ok?'○':'×'}</div>`;
+    box.appendChild(row);
+  });
+}
+</script>
+</body>
+</html>
