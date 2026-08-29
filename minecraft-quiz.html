@@ -74,7 +74,7 @@
   .resultTitle{text-align:center;font-size:42px;font-weight:1000;margin:18px 0 2px}
   .score{text-align:center;font-size:68px;font-weight:1000;color:#77df6b;text-shadow:0 4px 0 #000;margin:4px 0 14px}
   .resultList{display:grid;gap:8px;margin:12px 0 18px}
-  .row{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:8px;background:#1a241b;border:2px solid #304332;padding:9px 10px;border-radius:6px}
+  .row{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:8px;background:#1a241b;border:2px solid #304332;padding:9px 10px;border-radius:6px}
   .row img{width:38px;height:38px;object-fit:contain}
   .ok{color:#6fe16f;font-weight:1000}.ng{color:#ff8a8a;font-weight:1000}
   .smallbtn{min-height:58px;border:3px solid #203020;border-bottom-width:6px;border-radius:7px;background:#55af4e;color:#fff;font-weight:1000;font-size:20px}
@@ -116,7 +116,7 @@
       </div>
       <div id="heard" class="heard">なまえを いってね</div>
       <div class="microw">
-        <button id="mic" class="mic" onclick="toggleMic()">🎤 マイクで こたえる</button>
+        <button id="mic" class="mic" onclick="toggleMic()">🎤 はじめに1回おす</button>
         <button class="skip" onclick="finishQuestion(false,'パス')">パス</button>
       </div>
       <div id="status" class="status">Android ChromeではHTTPSでマイクを許可してください</div>
@@ -189,7 +189,7 @@ const QUESTIONS = [
   {name:"ベッド", aliases:["べっど","赤いベッド"], category:"アイテム", file:"Red Bed JE4 BE3.png", icon:"🛏️"}
 ];
 
-let game=[], index=0, score=0, answers=[], remain=15, timer=null, recognition=null, locked=false, listening=false;
+let game=[], index=0, score=0, answers=[], remain=15, timer=null, recognition=null, locked=false, listening=false, micSession=false;
 
 function norm(s){
   return (s||"").toLowerCase()
@@ -214,10 +214,10 @@ function show(id){
   document.getElementById(id).classList.add("active");
 }
 function showHome(){
-  stopRecognition();clearInterval(timer);show("home");
+  micSession=false;stopRecognition();clearInterval(timer);show("home");
 }
 function startGame(n){
-  game=shuffle(QUESTIONS).slice(0,n); index=0;score=0;answers=[];show("quiz"); loadQuestion();
+  game=shuffle(QUESTIONS).slice(0,n); index=0;score=0;answers=[];micSession=false;show("quiz"); loadQuestion();
 }
 function loadQuestion(){
   locked=false;remain=15;
@@ -228,7 +228,7 @@ function loadQuestion(){
   document.getElementById("category").textContent=q.category;
   document.getElementById("heard").className="heard";
   document.getElementById("heard").textContent="なまえを いってね";
-  document.getElementById("status").textContent="🎤を押して声で答えよう";
+  document.getElementById("status").textContent=micSession?"マイクで きいています…":"最初だけ 🎤を押してね";
   document.getElementById("answerFlash").classList.remove("show");
   const img=document.getElementById("qimg"), fb=document.getElementById("fallback");
   fb.textContent=q.icon||"❓"; fb.style.display="none";img.style.display="block";
@@ -241,6 +241,10 @@ function loadQuestion(){
     document.getElementById("bar").style.transform=`scaleX(${remain/15})`;
     if(remain<=0) finishQuestion(false,"じかんぎれ");
   },100);
+
+  if(micSession){
+    setTimeout(()=>startRecognition(),250);
+  }
 }
 function makeRecognition(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -273,24 +277,47 @@ function makeRecognition(){
     listening=false;
     const map={not_allowed:"マイクの許可が必要です", "not-allowed":"マイクの許可が必要です", "no-speech":"声が聞こえませんでした", network:"音声認識の通信エラーです"};
     document.getElementById("status").textContent=map[e.error]||("マイクエラー: "+e.error);
-    document.getElementById("mic").textContent="🎤 マイクで こたえる";
+    if(e.error==="not-allowed" || e.error==="not_allowed"){
+      micSession=false;
+      document.getElementById("mic").textContent="🎤 マイクで こたえる";
+    }
   };
   r.onend=()=>{
     listening=false;
-    document.getElementById("mic").textContent="🎤 マイクで こたえる";
     document.getElementById("heard").classList.remove("listening");
+    if(micSession && !locked){
+      document.getElementById("mic").textContent="🛑 きいています";
+      setTimeout(()=>startRecognition(),250);
+    }else{
+      document.getElementById("mic").textContent="🎤 マイクで こたえる";
+    }
   };
   return r;
 }
-function toggleMic(){
-  if(locked)return;
-  if(listening){stopRecognition();return}
+function startRecognition(){
+  if(locked || !micSession)return;
   if(!recognition) recognition=makeRecognition();
   if(!recognition){
+    micSession=false;
     document.getElementById("status").textContent="このブラウザは音声認識に対応していません。Android Chrome + HTTPSで試してください。";
     return;
   }
-  try{recognition.start()}catch(e){}
+  if(listening)return;
+  try{recognition.start()}catch(e){
+    setTimeout(()=>{ if(micSession && !locked && !listening) startRecognition(); },300);
+  }
+}
+function toggleMic(){
+  if(locked)return;
+  if(micSession){
+    micSession=false;
+    stopRecognition();
+    document.getElementById("mic").textContent="🎤 マイクで こたえる";
+    document.getElementById("status").textContent="マイクを とめました";
+    return;
+  }
+  micSession=true;
+  startRecognition();
 }
 function stopRecognition(){
   if(recognition && listening){try{recognition.stop()}catch(e){}}
@@ -319,7 +346,7 @@ function showResult(){
   const box=document.getElementById("resultList");box.innerHTML="";
   answers.forEach((a,i)=>{
     const row=document.createElement("div");row.className="row";
-    row.innerHTML=`<div style="font-weight:1000">${i+1}</div><div style="display:flex;align-items:center;gap:10px"><img src="${FILE(a.q.file)}" alt="${a.q.name}" onerror="this.style.display='none'"><div><div style="font-weight:1000">${a.q.name}</div><div style="font-size:12px;color:#aebdaa">${a.q.category}</div></div></div><div class="${a.ok?'ok':'ng'}">${a.ok?'○':'×'}</div>`;
+    row.innerHTML=`<div style="font-weight:1000">${i+1}</div><div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:52px;height:52px;flex:0 0 52px;display:flex;align-items:center;justify-content:center;background:#8ac675;border:2px solid #304332;border-radius:5px;overflow:hidden"><img src="${FILE(a.q.file)}" alt="${a.q.name}" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span style="display:none;font-size:28px">${a.q.icon||'❓'}</span></div><div style="min-width:0"><div style="font-weight:1000">${a.q.name}</div><div style="font-size:12px;color:#aebdaa">${a.q.category}</div></div></div><div class="${a.ok?'ok':'ng'}">${a.ok?'○':'×'}</div>`;
     box.appendChild(row);
   });
 }
