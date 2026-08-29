@@ -119,7 +119,7 @@
         <button id="mic" class="mic" onclick="toggleMic()">🎤 はじめに1回おす</button>
         <button class="skip" onclick="finishQuestion(false,'パス')">パス</button>
       </div>
-      <div id="status" class="status">Android ChromeではHTTPSでマイクを許可してください</div>
+      <div id="status" class="status">最初に1回だけマイクを許可してください</div>
     </div>
   </section>
 
@@ -191,17 +191,73 @@ const QUESTIONS = [
 
 let game=[], index=0, score=0, answers=[], remain=15, timer=null, recognition=null, locked=false, listening=false, micSession=false;
 
-function norm(s){
-  return (s||"").toLowerCase()
-    .replace(/[ 　・ー〜～!！?？。、,.]/g,"")
-    .replace(/ｔｎｔ/g,"tnt");
+function kataToHira(str){
+  return (str||"").replace(/[\u30A1-\u30F6]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
 }
-function hiraToKata(str){return str.replace(/[\u3041-\u3096]/g,ch=>String.fromCharCode(ch.charCodeAt(0)+0x60))}
+function normalizeDigits(str){
+  const map={
+    "0":"ぜろ","１":"いち","1":"いち","２":"に","2":"に","３":"さん","3":"さん","４":"よん","4":"よん",
+    "５":"ご","5":"ご","６":"ろく","6":"ろく","７":"なな","7":"なな","８":"はち","8":"はち","９":"きゅう","9":"きゅう"
+  };
+  return (str||"").replace(/[0-9０-９]/g,ch=>map[ch]||ch);
+}
+function commonReading(str){
+  let x=str||"";
+  const reps=[
+    ["草","くさ"],["土","つち"],["石","いし"],["砂","すな"],["鉄","てつ"],["金","きん"],
+    ["弓","ゆみ"],["矢","や"],["村人","むらびと"],["作業台","さぎょうだい"],
+    ["丸石","まるいし"],["黒曜石","こくようせき"],["石炭","せきたん"],
+    ["鉱石","こうせき"],["剣","つるぎ"],["松明","たいまつ"],["竈","かまど"],
+    ["鶏","にわとり"],["牛","うし"],["羊","ひつじ"],["豚","ぶた"],
+    ["狼","おおかみ"],["蜂","はち"]
+  ];
+  for(const [a,b] of reps)x=x.split(a).join(b);
+  return x;
+}
+function norm(s){
+  let x=(s||"").toLowerCase()
+    .replace(/[ 　・ー〜～!！?？。、,.「」『』（）()]/g,"")
+    .replace(/ｔｎｔ/g,"tnt");
+  x=normalizeDigits(x);
+  x=commonReading(x);
+  x=kataToHira(x);
+  return x;
+}
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));
+  for(let i=0;i<=m;i++)dp[i][0]=i;
+  for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      const cost=a[i-1]===b[j-1]?0:1;
+      dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);
+    }
+  }
+  return dp[m][n];
+}
+function similarEnough(a,b){
+  if(!a||!b)return false;
+  if(a===b)return true;
+
+  // 長めの答えは「○○です」「これは○○」のような認識も許可
+  if(a.length>=3 && b.includes(a))return true;
+  if(b.length>=3 && a.includes(b))return true;
+
+  // 音声認識の1文字程度のズレを許容
+  const maxLen=Math.max(a.length,b.length);
+  const d=levenshtein(a,b);
+  if(maxLen>=7 && d<=2)return true;
+  if(maxLen>=4 && d<=1)return true;
+  return false;
+}
 function matches(q, spoken){
-  const x=norm(spoken), variants=[q.name,...(q.aliases||[])];
-  return variants.some(v=>{
-    const a=norm(v);
-    return x===a || hiraToKata(x)===hiraToKata(a);
+  const candidates=Array.isArray(spoken)?spoken:[spoken];
+  const variants=[q.name,...(q.aliases||[])].map(norm);
+
+  return candidates.some(text=>{
+    const x=norm(text);
+    return variants.some(v=>similarEnough(v,x));
   });
 }
 function shuffle(a){
@@ -250,7 +306,7 @@ function makeRecognition(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR)return null;
   const r=new SR();
-  r.lang="ja-JP";r.interimResults=true;r.continuous=true;
+  r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=5;
   r.onstart=()=>{
     listening=true;
     document.getElementById("heard").classList.add("listening");
@@ -259,18 +315,36 @@ function makeRecognition(){
   };
   r.onresult=e=>{
     if(locked)return;
-    let interim="",finalText="";
+    const q=game[index];
+    let displayText="";
+    let allCandidates=[];
+    let hasFinal=false;
+
     for(let i=e.resultIndex;i<e.results.length;i++){
-      const t=e.results[i][0].transcript;
-      if(e.results[i].isFinal)finalText+=t; else interim+=t;
+      const res=e.results[i];
+      if(res[0] && !displayText)displayText=res[0].transcript;
+      for(let j=0;j<res.length;j++){
+        if(res[j] && res[j].transcript)allCandidates.push(res[j].transcript);
+      }
+      if(res.isFinal)hasFinal=true;
     }
-    const text=finalText||interim;
-    if(text){
+
+    if(displayText){
       const h=document.getElementById("heard");
-      h.textContent=text;
-      const q=game[index];
-      if(matches(q,text)){h.classList.add("good");finishQuestion(true,text)}
-      else if(finalText){h.classList.add("bad");setTimeout(()=>{if(!locked){h.classList.remove("bad");h.textContent="もういちど いってみよう"}},700)}
+      h.textContent=displayText;
+
+      if(matches(q,allCandidates)){
+        h.classList.add("good");
+        finishQuestion(true,displayText);
+      }else if(hasFinal){
+        h.classList.add("bad");
+        setTimeout(()=>{
+          if(!locked){
+            h.classList.remove("bad");
+            h.textContent="もういちど いってみよう";
+          }
+        },700);
+      }
     }
   };
   r.onerror=e=>{
